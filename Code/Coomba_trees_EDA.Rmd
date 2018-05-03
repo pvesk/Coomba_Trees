@@ -11,31 +11,51 @@ setwd("~/Dropbox/Personal/Coomba/CoombaTrees")
 #Coomba trees
 This document presents measurements of trees planted at Coomba by Mare and Mart Vesk.
 
+```{r loadpkgs}
+library(readxl)
+library(dplyr)
+library(tidyr)
+```
+
 ##Read in the data
 
 ```{r read}
-library(readxl)
 d <- read_excel("~/Dropbox/Personal/Coomba/CoombaTrees/Data/Copy of coomba_trees_statistics_08012016.xlsx")
-View(d)
+#View(d)
 summary(d)
 ```
-
-```{r}
+Tidy up classes
+```{r change}
 d$notes <- as.character(d$notes)
-d$oh.can <- as.numeric((d$oh.can))
+d$oh.can <- as.numeric(d$oh.can)
+d$forest <- as.factor(d$forest)
+
 tail(d)
 ```
 
 Remove some data, change some spp names. 'flg' to 'fg', 'bg' to 'sbg'
-```{r}
-d <- d[d$species!="exist frg",]
-ROWS <- d$species == 'bg' & !is.na(d$species)
-COLS <- 9
-d[ROWS, COLS] <- 'sbg'
+```{r tidynames}
+d <- d[d$species != "exist frg", ]
+d %>% drop_na(species)
 
-ROWS <- d$species == 'flg' & !is.na(d$species)
-d[ROWS, COLS] <- 'fg'
-unique(d$species)
+#indexing by names
+
+new <- c(
+  bg = "sbg",
+  flg = "fg"
+)[d$species]
+d$species <- ifelse(is.na(new), d$species, new)
+
+d$species <- as.factor(d$species)
+d <- d %>% filter(!is.na(species))
+
+#does the same thing as a bove, but clunky
+#ROWS <- d$species == 'bg' & !is.na(d$species)
+#COLS <- 9
+#d[ROWS, COLS] <- 'sbg'
+#ROWS <- d$species == 'flg' & !is.na(d$species)
+#d[ROWS, COLS] <- 'fg'
+#unique(d$species)
 ```
 
 
@@ -44,20 +64,25 @@ unique(d$species)
 First, lets try to plot size through time:
 
 ```{r plot1, echo=FALSE, message=FALSE, warning=FALSE}
-plot(d$girth_cm~d$years,  ylab = "Girth (cm)", xlab = "Years", pch=d$forest, cex=0.6, ylim = c(0,180), xlim = c(0,30))
+plot(d$girth_cm ~ jitter(d$years),  ylab = "Girth (cm)", xlab = "Years", col=rainbow(5)[as.integer(factor(d$forest))], cex=0.6, ylim = c(0,180), xlim = c(0,30))
+legend("topleft", legend = c("camp", "east", "front","hill", "new"), pch = 19, col=rainbow(5)[1:5])
+
 ```
 
 Next, lets try to plot height through time:
 
-```{r plot1, echo=FALSE, message=FALSE, warning=FALSE}
-plot(d$ht_m~d$years, ylab = "Height (m)", pch=d$forest, cex=0.6, xlab = "Years", ylim = c(0,30), xlim = c(0,30))
+```{r plot2, echo=FALSE, message=FALSE, warning=FALSE}
+plot(d$ht_m ~ jitter(d$years), ylab = "Height (m)", cex=0.6, xlab = "Years", ylim = c(0,30), xlim = c(0,30), col=rainbow(5)[as.integer(factor(d$forest))])
+legend("topleft", legend = c("camp", "east", "front","hill", "new"), pch = 19, col=rainbow(5)[1:5])
+
 ```
 
 
 and ht againast girth:
 ```{r allometry_plot, message=FALSE, warning=FALSE}
-plot(d$ht_m~d$girth_cm,  ylab = "Height (m)", xlab = "Girth (cm)", pch=d$forest, cex=0.6, ylim = c(0,30), xlim = c(0,180)) 
-legend(x = "topleft", c("new", "front", "east", "hill", "camp"), pch=c("n", "f", "E", "h", "C" ))
+plot(d$ht_m ~ d$girth_cm,  ylab = "Height (m)", xlab = "Girth (cm)", cex=0.6, ylim = c(0,30), xlim = c(0,180),
+     col=rainbow(5)[as.integer(factor(d$forest))]) 
+legend("topleft", legend = c("camp", "east", "front","hill", "new"), pch = 19, col=rainbow(5)[1:5])
 ```
 ```{r subset by forest}
 f<- d[d$forest=="hill_forest",]
@@ -68,16 +93,14 @@ plot(f$ht_m ~ f$girth_cm,  ylab = "Height (m)", xlab = "Girth (cm)", ylim = c(0,
 ## Recasting
 get the girth data into wide format
 ```{r recast}
-library(dplyr)
-library(tidyr)
 d_girth <-spread(d[,c(1,4,8,9,10)], years, girth_cm)
 d_ht <-spread(d[,c(1,5,8,9,10)], years, ht_m)
 ```
 
 Let's try plotting the trajectory of girth of individual trees.
 ```{r plot2, message=FALSE, warning=FALSE}
-yrs <- c(min(d$years):23, 25:max(d$years))
-matplot(x = yrs[], y = t(d_girth[,4:26]), type="o", cex=0.6,  ylab = "Girth (cm)", xlab = "Years",ylim = c(0,180), xlim = c(0,30))
+yrs <-c(min(d$years):23, 25:max(d$years))
+matplot(x = yrs[], y = t(d_girth[,4:26]), type="o", cex=0.6,  ylab = "Girth (cm)", xlab = "Years", ylim = c(0,180), xlim = c(0,30))
 ```
 
 Next, let's try the trajectory of height of individual trees.
@@ -93,7 +116,7 @@ table(d$oh.can)
 ```
 
 ```{r}
-plot(d$girth_cm ~ d$oh.can)
+plot(d$girth_cm ~ jitter(d$oh.can))
 oh <- qlogis(0.8*(d$oh.can+0.125))
 hist(oh)
 ```
@@ -123,7 +146,13 @@ dat1 <- data.frame(x, y)
 prior1 <- c(prior(normal(1, 2), nlpar = "b1"),
             prior(normal(0, 2), nlpar = "b2"))
 fit1 <- brm(bf(y ~ b1 * exp(b2 * x), b1 + b2 ~ 1, nl = TRUE),
-            data = dat1, prior = prior1)
+            data = dat1, prior = prior1, cores = 4)
+```
+
+
+```{r}
+summary(fit1, waic = TRUE) 
+plot(fit1) 
 ```
 
 
@@ -133,7 +162,7 @@ Now with our trees. first a linear model
 fit <- brm(ht_m ~ years, #Hmax + scale * years, #+ (1|tree),
              #Hmax * (1 - exp(-log(2)/scale * year)) + (1|tree) + (1|forest),
           # Hmax ~ 1, scale ~ 1,
-           data = d, family = gaussian())
+           data = d, family = gaussian(), cores = 4)
       #     prior = c( prior(normal(40, 10), par = "Hmax"),
        #                   prior(normal(10, 5), par = "scale")) )
 
@@ -141,7 +170,8 @@ fit <- brm(ht_m ~ years, #Hmax + scale * years, #+ (1|tree),
 
 
 ```{r}
-summary(fit, waic = TRUE)
+summary(fit, waic = TRUE,R2 = TRUE) 
+plot(fit)
 ```
 
 
@@ -155,7 +185,7 @@ Now a loglinear model:
 fit2 <- brm(ht_m ~ log(years), #Hmax + scale * years, #+ (1|tree),
              #Hmax * (1 - exp(-log(2)/scale * year)) + (1|tree) + (1|forest),
           # Hmax ~ 1, scale ~ 1,
-           data = d, family = gaussian())
+           data = d, family = gaussian(), cores = 4)
       #     prior = c( prior(normal(40, 10), par = "Hmax"),
        #                   prior(normal(10, 5), par = "scale")) )
 
@@ -172,7 +202,7 @@ plot(marginal_effects(fit2), points = TRUE)
 Now a loglinear model with lognormal heights:
 ```{r}
 fit3 <- brm(ht_m ~ log(years), #Hmax + scale * years, #+ (1|tree),
-           data = d, family = lognormal() )
+           data = d, family = lognormal(), cores = 4 )
       #     prior = c( prior(normal(40, 10), par = "Hmax"),
        #                   prior(normal(10, 5), par = "scale")) )
 
@@ -218,15 +248,15 @@ Perhaps the exponetnial model is best.
 pp_check(fit4)
 ```
 
-Now a loglinear model with varying intercept and slope:
+Now a loglinear model with  intercept and slope both varying by tree and by foret (not nested):
 ```{r}
 fit5 <- brm(ht_m ~ log(years) + (log(years)|tree) + (log(years)|forest),
            data = d, family = gaussian(),
-           control = list(adapt_delta = 0.9))
+           control = list(adapt_delta = 0.9), cores = 4)
 ```
 
 ```{r}
-summary(fit5)
+summary(fit5,R2 = TRUE)
 ```
 
 
@@ -235,31 +265,47 @@ pp_check(fit5)
 ```
 nice!
 
+plot it
+```{r}
+plot(marginal_effects(fit5), points = TRUE)
+```
+
+facet plot
+```{r}
+conditions <- data.frame(forest = unique(d$forest))
+rownames(conditions) <- unique(d$forest)
+plot(marginal_effects(fit5, conditions = conditions, 
+                      re_formula = NULL, method = "predict"), 
+     ncol = 2, points = TRUE)
+```
+
+
 Now a loglinear model with varying intercept at tree and forest level but and slope at forest level:
 ```{r}
 prior6 = c( prior(normal(10, 5), nlpar = "b1"),
            prior(normal(1, 1), nlpar = "b2"))
 fit6 <- brm(ht_m ~ log(years) + (1|tree) + (log(years)|forest),
            data = d, family = gaussian(),
-           control = list(adapt_delta = 0.9), cores = 2)
+           control = list(adapt_delta = 0.9), cores = 4)
 ```
 
 ```{r}
 summary(fit6)
+pairs(fit6)
 ```
 
 
 ```{r}
 pp_check(fit6)
 ```
-Also nice, but perhaps not perfect on the left side hump. try allowing varyaing slope for individuals, not intercept.
+Also nice, but perhaps not perfect on the left side hump. try allowing varying slope for individuals, not intercept.
 
 ```{r}
 prior7 = c( prior(normal(10, 5), nlpar = "b1"),
            prior(normal(1, 1), nlpar = "b2"))
 fit7 <- brm(ht_m ~ log(years) + (0 + log(years)|tree) + (log(years)|forest),
            data = d, family = gaussian(),
-           control = list(adapt_delta = 0.92, max_treedepth = 12), cores = 2)
+           control = list(adapt_delta = 0.92, max_treedepth = 12), cores = 4)
 ```
 
 
@@ -275,7 +321,8 @@ Hmax ~ 1 +  (1|forest), scale ~ 1, nl = TRUE),
 data = d, family = gaussian(),
 prior = c(prior(student_t(3, 40, 10), lb=0, nlpar = "Hmax"),
 prior(student_t(3, 20, 10), lb=0, nlpar = "scale")),
-                control = list(adapt_delta = 0.9))
+                control = list(adapt_delta = 0.9),
+   cores = 4)
 
 ```
 
