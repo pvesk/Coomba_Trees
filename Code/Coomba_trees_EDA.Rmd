@@ -1,11 +1,11 @@
 ---
-title: "Coomba_trees"
+title: "Coomba_trees_EDA"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("~/Documents/Personal/Coomba")
+setwd("~/Dropbox/Personal/Coomba/CoombaTrees")
 ```
 
 #Coomba trees
@@ -15,7 +15,7 @@ This document presents measurements of trees planted at Coomba by Mare and Mart 
 
 ```{r read}
 library(readxl)
-d <- read_excel("~/Documents/Personal/Coomba/Copy of coomba_trees_statistics_08012016.xlsx")
+d <- read_excel("~/Dropbox/Personal/Coomba/CoombaTrees/Data/Copy of coomba_trees_statistics_08012016.xlsx")
 View(d)
 summary(d)
 ```
