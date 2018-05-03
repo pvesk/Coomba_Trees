@@ -29,9 +29,13 @@ tail(d)
 Remove some data, change some spp names. 'flg' to 'fg', 'bg' to 'sbg'
 ```{r}
 d <- d[d$species!="exist frg",]
-(ROWS <- d[d$species == 'bg', ] )
+ROWS <- d$species == 'bg' & !is.na(d$species)
 COLS <- 9
-d[ROWS, COLS]
+d[ROWS, COLS] <- 'sbg'
+
+ROWS <- d$species == 'flg' & !is.na(d$species)
+d[ROWS, COLS] <- 'fg'
+unique(d$species)
 ```
 
 
