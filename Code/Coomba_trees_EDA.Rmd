@@ -15,6 +15,7 @@ This document presents measurements of trees planted at Coomba by Mare and Mart 
 library(readxl)
 library(dplyr)
 library(tidyr)
+library(brms) #Baye regression modelling in stan
 ```
 
 ##Read in the data
@@ -119,15 +120,18 @@ table(d$oh.can)
 plot(d$girth_cm ~ jitter(d$oh.can))
 oh <- qlogis(0.8*(d$oh.can+0.125))
 hist(oh)
+plot(d$girth_cm ~ jitter(oh))
+d$oh <- oh
 ```
 
 
 # try some linear modeling with brms
+first an example or two
 ```{r}
-library(brms)
-fit <- brm(count ~ log_Age_c + log_Base4_c * Trt_c + (1|patient) + (1|obs), 
-           data = epilepsy, family = "poisson")
-summary(fit, waic = TRUE) 
+
+#fit <- brm(count ~ log_Age_c + log_Base4_c * Trt_c + (1|patient) + (1|obs), 
+ #          data = epilepsy, family = "poisson", cores = 4)
+#summary(fit, waic = TRUE) 
 ```
 
 ```{r}
@@ -170,7 +174,7 @@ fit <- brm(ht_m ~ years, #Hmax + scale * years, #+ (1|tree),
 
 
 ```{r}
-summary(fit, waic = TRUE,R2 = TRUE) 
+summary(fit,loo = TRUE,  waic = TRUE, R2 = TRUE) 
 plot(fit)
 ```
 
@@ -192,7 +196,7 @@ fit2 <- brm(ht_m ~ log(years), #Hmax + scale * years, #+ (1|tree),
 ```
 
 ```{r}
-summary(fit2)
+summary(fit2, loo = TRUE,  waic = TRUE, R2 = TRUE)
 ```
 
 ```{r}
@@ -210,7 +214,7 @@ fit3 <- brm(ht_m ~ log(years), #Hmax + scale * years, #+ (1|tree),
 
 
 ```{r}
-summary(fit3)
+summary(fit3, loo = TRUE,  waic = TRUE, R2 = TRUE)
 ```
 
 plot3
@@ -233,16 +237,7 @@ pp_check(fit2)
 ```{r}
 pp_check(fit3)
 ```
-this overpredicts.drop the (semi) loglinear model with lognormal error. i think it is not meaningful and it fits poorly.
-
-```{r}
-LOO(fit, fit2, fit3, fit4, fit5, fit6, fit7)
-```
-
-so the loglinear model with gaussian errors is best fitting of linear models. Model three, which error increases with size, is poor. 
-but log normal has a negative intercept, which is not right.
-
-Perhaps the exponetnial model is best.
+this overpredicts. So, drop the (semi) loglinear model with lognormal error. i think it is not meaningful and it fits poorly.
 
 ```{r}
 pp_check(fit4)
@@ -252,7 +247,7 @@ Now a loglinear model with  intercept and slope both varying by tree and by fore
 ```{r}
 fit5 <- brm(ht_m ~ log(years) + (log(years)|tree) + (log(years)|forest),
            data = d, family = gaussian(),
-           control = list(adapt_delta = 0.9), cores = 4)
+           control = list(adapt_delta = 0.92), cores = 4)
 ```
 
 ```{r}
@@ -286,12 +281,12 @@ prior6 = c( prior(normal(10, 5), nlpar = "b1"),
            prior(normal(1, 1), nlpar = "b2"))
 fit6 <- brm(ht_m ~ log(years) + (1|tree) + (log(years)|forest),
            data = d, family = gaussian(),
-           control = list(adapt_delta = 0.9), cores = 4)
+           control = list(adapt_delta = 0.93), cores = 4)
 ```
 
 ```{r}
 summary(fit6)
-pairs(fit6)
+#pairs(fit6)
 ```
 
 
@@ -313,8 +308,31 @@ fit7 <- brm(ht_m ~ log(years) + (0 + log(years)|tree) + (log(years)|forest),
 pp_check(fit7)
 ```
 
+#Now a nonlinear ht growth model
 
 ```{r nonlinear height growth}
+fit4.1 <- brm(bf(ht_m ~ Hmax * (1 - exp(-log(2) / scale * years) ) , 
+Hmax ~ 1 , scale ~ 1, nl = TRUE),
+
+data = d, family = gaussian(),
+prior = c(prior(student_t(3, 40, 10), lb=0, nlpar = "Hmax"),
+prior(student_t(3, 20, 10), lb=0, nlpar = "scale")),
+                control = list(adapt_delta = 0.9),
+   cores = 4)
+
+```
+
+
+```{r}
+plot(fit4.1)
+```
+
+```{r}
+summary(fit4.1, loo = TRUE, R2 =TRUE)
+```
+
+
+```{r nonlinear height growth Forest}
 fit4 <- brm(bf(ht_m ~ Hmax * (1 - exp(-log(2) / scale * years) ) , 
 Hmax ~ 1 +  (1|forest), scale ~ 1, nl = TRUE),
 
@@ -357,3 +375,73 @@ plot(marginal_effects(fit4, conditions = conditions,
 ```
 
 
+
+```{r}
+LOO(fit, fit2, fit3, fit4, fit5, fit6, fit7)
+```
+
+so the loglinear model (fit2) with gaussian errors is best fitting of linear models. 
+Model three, which error increases with size, is poor. 
+but log normal has a negative intercept, which is not right.
+but it still outperforms exponentil model without a RE for forest. (fit 4.1)
+
+
+Perhaps the exponential model (fit4) is best. BUT no, that model had Hmax varying by Forest.
+
+of random effect structures, Fit5 is best:
+a loglinear model with  intercept and slope both varying by tree and by forest (not nested)
+
+```{r}
+fit2.1 <- brm(ht_m ~ log(years) + oh , #Hmax + scale * years, #+ (1|tree),
+             #Hmax * (1 - exp(-log(2)/scale * year)) + (1|tree) + (1|forest),
+          # Hmax ~ 1, scale ~ 1,
+           data = d, family = gaussian(), cores = 4)
+      #     prior = c( prior(normal(40, 10), par = "Hmax"),
+       #                   prior(normal(10, 5), par = "scale")) )
+
+```
+
+
+
+```{r summ2.1}
+summary(fit2.1, loo = TRUE, R2 = TRUE)
+```
+
+plot it
+```{r plot2.1}
+plot(marginal_effects(fit2.1), points = TRUE)
+```
+
+
+
+
+```{r}
+fit2.2 <- brm(ht_m ~ log(years) + oh + sqrt(girth_cm), #Hmax + scale * years, #+ (1|tree),
+             #Hmax * (1 - exp(-log(2)/scale * year)) + (1|tree) + (1|forest),
+          # Hmax ~ 1, scale ~ 1,
+           data = d, family = gaussian(), cores = 4)
+      #     prior = c( prior(normal(40, 10), par = "Hmax"),
+       #                   prior(normal(10, 5), par = "scale")) )
+
+```
+
+
+```{r summ2.2}
+summary(fit2.2, loo = TRUE, R2 = TRUE)
+```
+
+plot it
+```{r}
+plot(marginal_effects(fit2.2), points = TRUE)
+```
+
+facet plot
+```{r}
+conditions <- data.frame(forest = unique(d$forest))
+rownames(conditions) <- unique(d$forest)
+plot(marginal_effects(fit4, conditions = conditions, 
+                      re_formula = NULL, method = "predict"), 
+     ncol = 2, points = TRUE)
+```
+
+lmer
